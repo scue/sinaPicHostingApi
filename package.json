@@ -5,6 +5,13 @@
   "main": "index.js",
   "author": "J3n5en",
   "license": "MIT",
+  "scripts": {
+    "start": "pm2 start process.json",
+    "stop": "pm2 stop process.json",
+    "status": "pm2 status process.json",
+    "delete": "pm2 delete process.json",
+    "restart": "pm2 restart process.json"
+  },
   "dependencies": {
     "axios": "^0.15.3",
     "formidable": "^1.1.1",

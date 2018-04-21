@@ -1,0 +1,14 @@
+{
+    "apps": [{
+      "name": "SinaWeiboPictureBed",
+      "script": "index.js",
+      "instances": 1,
+      "exec_mode": "cluster",
+      "merge_logs": true,
+      "error_file": "logs/run.log",
+      "out_file": "logs/run.log",
+      "max_restarts": 10000,
+      "restart_delay": 1000,
+      "min_uptime": 3000
+    }]
+  }
