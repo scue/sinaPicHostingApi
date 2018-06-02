@@ -60,7 +60,7 @@ async function login(username,password){
 			'User-Agent':'Mozilla/5.0 (Windows NT 6.3; WOW64; rv:41.0) Gecko/20100101 Firefox/41.0',
 		}
 	})
-	let loginUrl = /location.replace\(\'(.*?)\'\)/g.exec(loginResp.data)[1]
+	let loginUrl = /location.replace\("([^"]*)"\);/g.exec(loginResp.data)[1]
 	await axios.get(loginUrl,{jar: cookieJar,withCredentials: true})
 }	
 /**
