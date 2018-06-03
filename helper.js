@@ -5,6 +5,8 @@ const axiosCookieJarSupport = require('node-axios-cookiejar')
 const tough = require('tough-cookie')
 const FileCookieStore = require("tough-cookie-filestore")
 const fs = require('fs')
+const request = require('request')
+const readline = require('readline')
 const config = require('./config.json')
 const username = config.auth.username
 const password = config.auth.password
@@ -17,9 +19,24 @@ async function preLogin(){
 	let preLoginUrl = 'http://login.sina.com.cn/sso/prelogin.php?entry=weibo&callback=sinaSSOController.preloginCallBack&su=MTUyNTUxMjY3OTY%3D&rsakt=mod&checkpin=1&client=ssologin.js%28v1.4.18%29&_=1458836718537'
 	let preLoginResp = await axios.get(preLoginUrl)
 	let preContentRegex = /\((.*?)\)/g
+	console.log(`preLoginResponse: ${preLoginResp.data}`);
     let patten = preContentRegex.exec(preLoginResp.data)
-    let {nonce, pubkey, servertime, rsakv} = JSON.parse(patten[1])
-    return {nonce, pubkey, servertime, rsakv}
+    let {pcid, nonce, pubkey, servertime, rsakv} = JSON.parse(patten[1])
+    return {pcid, nonce, pubkey, servertime, rsakv}
+}
+function inputPinCode(pinCodePath) {
+	const rl = readline.createInterface({
+		input: process.stdin,
+		output: process.stdout
+	});
+
+	return new Promise((resolve, reject) => {
+		rl.question(`请输入验证码，验证码图片在${pinCodePath}\n`, pinCode => {
+			console.log(`你输入的验证码为：${pinCode}`);
+			rl.close();
+			resolve(pinCode);
+		});
+	});
 }
 /**
  * [login and save cookie to file]
@@ -28,7 +45,7 @@ async function preLogin(){
  */
 async function login(username,password){
 	let RSAKey = new sinaSSOEncoder.RSAKey();
-	let {nonce, pubkey, servertime, rsakv} = await preLogin()
+	let {pcid, nonce, pubkey, servertime, rsakv} = await preLogin()
 	RSAKey.setPublic(pubkey, "10001");
   	passwd = RSAKey.encrypt([servertime, nonce].join("\t") + "\n" + password)
   	username = new Buffer(encodeURIComponent(username)).toString('base64')
@@ -52,7 +69,16 @@ async function login(username,password){
         'prelt': '115',
         'url': 'http://weibo.com/ajaxlogin.php?framelogin=1&callback=parent.sinaSSOController.feedBackUrlCallBack',
         'returntype': 'META'
-  	}
+	  }
+	if (pcid) {
+		let pinImgUrl = `http://login.sina.com.cn/cgi/pin.php?r=${Math.floor(Math.random() * 1e8)}&s=0&p=${pcid}`;
+		let pinCodePath = `/tmp/pinCode.png`
+		request(pinImgUrl).pipe(fs.createWriteStream(pinCodePath));
+		let pinCode = await inputPinCode(pinCodePath)
+		data['door'] = pinCode;
+		data['pcid'] = pcid;
+	}
+	console.log(`post data: ${JSON.stringify(data, "", " ")}`);
   	url = 'http://login.sina.com.cn/sso/login.php?client=ssologin.js(v1.4.18)'
 	let loginResp = await axios.post(url, querystring.stringify(data),{
 		jar: cookieJar,
@@ -60,8 +86,16 @@ async function login(username,password){
 			'User-Agent':'Mozilla/5.0 (Windows NT 6.3; WOW64; rv:41.0) Gecko/20100101 Firefox/41.0',
 		}
 	})
-	let loginUrl = /location.replace\("([^"]*)"\);/g.exec(loginResp.data)[1]
-	await axios.get(loginUrl,{jar: cookieJar,withCredentials: true})
+	let reg = /location\.replace\((?:"|')(.*)(?:"|')\)/;
+	let loginUrl = reg.exec(loginResp.data)[1];
+	console.log(`logingUrl:`, loginUrl);
+	await axios.get(loginUrl,{
+		jar: cookieJar,
+		withCredentials: true,
+		headers: {
+			'User-Agent':'Mozilla/5.0 (Windows NT 6.3; WOW64; rv:41.0) Gecko/20100101 Firefox/41.0',
+		}
+	})
 }	
 /**
  * @param  {[String]} file {picture path}
@@ -95,9 +129,13 @@ async function getImgUrl(file){
 			errTime = 0
 			return false
 		}
-		return login(username,password).then(()=>{
-			return getImgUrl(file)
-		})
+		return login(username, password)
+			.then(() => {
+				return getImgUrl(file);
+			})
+			.catch(e => {
+				console.warn(e);
+			});
 	}
 }
 module.exports = getImgUrl
